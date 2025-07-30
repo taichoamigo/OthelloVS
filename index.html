@@ -189,7 +189,7 @@
         
         // 待機中ゲームリストをリアルタイムで監視・表示する関数
         function listenForWaitingGames() {
-            if (unsubscribeWaitingGames) unsubscribeWaitingGames(); // 既存のリスナーを解除
+            if (unsubscribeWaitingGames) unsubscribeWaitingGames();
             
             const gamesCollectionRef = collection(db, `artifacts/${appId}/public/data/games`);
             const q = query(gamesCollectionRef, where("status", "==", "waiting"));
@@ -225,35 +225,40 @@
             if (user) {
                 currentUser = user;
                 const userRef = doc(db, `artifacts/${appId}/public/data/users`, user.uid);
-                let userSnap = await getDoc(userRef);
+                const userSnap = await getDoc(userRef);
 
                 if (userSnap.exists() && userSnap.data().friendlyId) {
                     currentUserNickname = userSnap.data().friendlyId;
                 } else {
-                    try {
-                        await runTransaction(db, async (transaction) => {
-                            const counterRef = doc(db, `artifacts/${appId}/public/data/counters`, "userNickname");
-                            const counterSnap = await transaction.get(counterRef);
-                            
-                            let newCount = 1;
-                            if (counterSnap.exists()) {
-                                newCount = counterSnap.data().count + 1;
-                            }
+                    // 新しいユーザーなので、ユニークなニックネームを生成する
+                    let friendlyId = '';
+                    let isUnique = false;
+                    let attempts = 0;
+                    const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
 
-                            const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-                            const noun = nouns[Math.floor(Math.random() * nouns.length)];
-                            const friendlyId = `${adj}${noun}${newCount}`;
-                            
-                            transaction.set(counterRef, { count: newCount });
-                            transaction.set(userRef, { friendlyId: friendlyId, uid: user.uid });
-                            
-                            currentUserNickname = friendlyId;
-                        });
-                    } catch (e) {
-                        console.error("Nickname generation transaction failed: ", e);
-                        currentUserNickname = `プレイヤー${user.uid.substring(0, 5)}`;
-                        await setDoc(userRef, { friendlyId: currentUserNickname, uid: user.uid });
+                    while (!isUnique && attempts < 20) { // 20回まで試行
+                        attempts++;
+                        const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+                        const noun = nouns[Math.floor(Math.random() * nouns.length)];
+                        const number = Math.floor(1000 + Math.random() * 9000); // 4桁の乱数
+                        let potentialId = `${adj}${noun}${number}`;
+
+                        const q = query(usersCollectionRef, where("friendlyId", "==", potentialId));
+                        const querySnapshot = await getDocs(q);
+
+                        if (querySnapshot.empty) {
+                            friendlyId = potentialId;
+                            isUnique = true;
+                        }
                     }
+
+                    if (!isUnique) {
+                        // フォールバック: ユニークな名前が見つからなかった場合
+                        friendlyId = `プレイヤー${user.uid.substring(0, 5)}`;
+                    }
+                    
+                    await setDoc(userRef, { friendlyId: friendlyId, uid: user.uid });
+                    currentUserNickname = friendlyId;
                 }
                 
                 userNicknameElement.textContent = currentUserNickname;
@@ -286,8 +291,18 @@
                 customAlert("ユーザー情報が取得できていません。");
                 return;
             }
-            const gameCollectionRef = collection(db, `artifacts/${appId}/public/data/games`);
-            const newGameDocRef = doc(gameCollectionRef);
+
+            // ユーザーが既に待機中のゲームを持っていないか確認
+            const gamesCollectionRef = collection(db, `artifacts/${appId}/public/data/games`);
+            const q = query(gamesCollectionRef, where("players.black", "==", currentUser.uid), where("status", "==", "waiting"));
+            const existingGames = await getDocs(q);
+
+            if (!existingGames.empty) {
+                customAlert("既に参加待機中のゲームがあります。");
+                return;
+            }
+
+            const newGameDocRef = doc(gamesCollectionRef);
             const gameId = newGameDocRef.id;
             currentGameId = gameId;
             const initialBoard = Array(8).fill(null).map(() => Array(8).fill(0));
@@ -315,18 +330,17 @@
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, gameId);
             
             try {
-                const gameData = await runTransaction(db, async (transaction) => {
+                await runTransaction(db, async (transaction) => {
                     const gameSnap = await transaction.get(gameRef);
                     if (!gameSnap.exists()) {
                         throw "指定されたゲームが見つかりません。";
                     }
                     const data = gameSnap.data();
                     if (data.players.black === currentUser.uid) {
-                        // 自分で作成したゲームに参加しようとしている（実質、待機画面に遷移）
-                        return data;
+                        return; // 自分で作成したゲームに参加しようとしている（待機画面に遷移するだけ）
                     }
-                    if (data.players.white) {
-                        throw "このゲームは既に満員です。";
+                    if (data.status !== 'waiting') {
+                        throw "このゲームは既に対戦中です。";
                     }
                     
                     transaction.update(gameRef, {
@@ -334,16 +348,10 @@
                         'playerNicknames.white': currentUserNickname,
                         status: 'active'
                     });
-                    
-                    // 更新後のデータを返す
-                    data.players.white = currentUser.uid;
-                    data.playerNicknames.white = currentUserNickname;
-                    data.status = 'active';
-                    return data;
                 });
 
                 currentGameId = gameId;
-                if (unsubscribeWaitingGames) unsubscribeWaitingGames(); // 待機リストの監視を停止
+                if (unsubscribeWaitingGames) unsubscribeWaitingGames();
                 setupScreen.style.display = 'none';
                 gameScreen.style.display = 'flex';
                 gameIdDisplay.textContent = gameId;
@@ -362,6 +370,8 @@
             } catch (error) {
                 console.error("Join game failed: ", error);
                 customAlert(typeof error === 'string' ? error : "ゲームへの参加に失敗しました。");
+                // 失敗したら待機リストを再読み込み
+                listenForWaitingGames();
             }
         }
 
@@ -548,7 +558,7 @@
                 unsubscribeGame = null;
             }
             currentGameId = null;
-            listenForWaitingGames(); // 待機画面に戻ったら再度リストの監視を開始
+            listenForWaitingGames();
         });
 
         // アプリケーションの開始
