@@ -9,560 +9,587 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            touch-action: manipulation; /* ダブルタップによるズームを無効化 */
         }
-        .board {
+        /* オセロの石のスタイル */
+        .disc {
+            width: 85%;
+            height: 85%;
+            border-radius: 50%;
+            transition: transform 0.4s ease-in-out;
+        }
+        .disc-black {
+            background-color: #1a1a1a;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 2px 3px rgba(0,0,0,0.3);
+        }
+        .disc-white {
+            background-color: #f0f0f0;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3), 0 2px 3px rgba(255,255,255,0.8);
+        }
+        /* 石が裏返るアニメーション */
+        .flipped {
+            transform: rotateY(180deg);
+        }
+        /* 石を置ける場所のヒント */
+        .valid-move-hint {
+            width: 50%;
+            height: 50%;
+            border-radius: 50%;
+            background-color: rgba(0, 180, 0, 0.3);
+            cursor: pointer;
+        }
+        #board-container {
             display: grid;
             grid-template-columns: repeat(8, 1fr);
             grid-template-rows: repeat(8, 1fr);
-            width: 90vw;
-            height: 90vw;
-            max-width: 500px;
-            max-height: 500px;
-            background-color: #008000; /* 深い緑色 */
-            border: 2px solid #333;
+            width: 100%;
+            max-width: 600px;
+            aspect-ratio: 1 / 1;
+            background-color: #16a34a; /* A slightly darker green for the board */
+            border: 8px solid #865439;
+            border-radius: 8px;
             box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-            aspect-ratio: 1 / 1; /* 正方形を維持 */
+            gap: 2px;
+            padding: 4px;
         }
         .cell {
+            background-color: #15803d; /* A nice green for the cells */
             display: flex;
             justify-content: center;
             align-items: center;
-            border: 1px solid #006400; /* やや暗い緑の線 */
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .cell:hover {
-            background-color: #009900;
-        }
-        .disc {
-            width: 80%;
-            height: 80%;
-            border-radius: 50%;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
-            transform: scale(0);
-            animation: place-disc 0.3s forwards;
-        }
-        @keyframes place-disc {
-            from { transform: scale(0); }
-            to { transform: scale(1); }
-        }
-        .black { background-color: #111; }
-        .white { background-color: #f0f0f0; }
-        
-        /* モーダル用のスタイル */
-        .modal {
-            display: none; /* 初期状態では非表示 */
-            position: fixed;
-            z-index: 100;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.5);
-            justify-content: center;
-            align-items: center;
-        }
-        .modal-content {
-            background-color: #fefefe;
-            margin: auto;
-            padding: 20px;
-            border: 1px solid #888;
-            width: 80%;
-            max-width: 400px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
     </style>
 </head>
-<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
 
-    <div id="setup-screen" class="w-full max-w-md bg-white p-8 rounded-xl shadow-lg text-center">
-        <h1 class="text-3xl font-bold mb-4 text-gray-800">オンラインオセロ</h1>
-        <p class="mb-2 text-gray-600">あなたのニックネーム:</p>
-        <p id="user-nickname" class="text-lg font-mono bg-gray-200 p-2 rounded mb-6 break-all">取得中...</p>
-        
-        <button id="create-game-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition duration-300 mb-4" disabled>
-            新しいゲームを作成
-        </button>
-        
-        <h2 class="text-xl font-bold mt-8 mb-4 text-gray-700">参加可能なゲーム (リアルタイム更新)</h2>
-        <div id="waiting-games-list" class="space-y-2 max-h-48 overflow-y-auto p-2 bg-gray-50 rounded border">
-            <p class="text-gray-500">参加可能なゲームはありません。</p>
-        </div>
-    </div>
+    <div class="container mx-auto p-4 flex flex-col items-center">
 
-    <div id="game-screen" class="hidden w-full max-w-xl flex-col items-center">
-        <div class="w-full flex justify-between items-center mb-4 p-4 bg-white rounded-xl shadow-md">
-            <div class="text-center">
-                <div id="black-player-name" class="text-lg font-bold">黒</div>
-                <div id="black-score" class="text-2xl font-mono">2</div>
+        <h1 class="text-3xl md:text-4xl font-bold mb-4 text-center">オンライン対戦オセロ</h1>
+
+        <!-- Game Control Section -->
+        <div id="game-setup" class="w-full max-w-md bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md mb-4">
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button id="new-game-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300">新しいゲームを開始</button>
             </div>
-            <div id="turn-indicator" class="text-xl font-semibold p-2 rounded-lg"></div>
-            <div class="text-center">
-                <div id="white-player-name" class="text-lg font-bold">白</div>
-                <div id="white-score" class="text-2xl font-mono">2</div>
+            <div class="mt-4">
+                <label for="join-game-id" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">ゲームIDで参加:</label>
+                <div class="flex gap-2">
+                    <input type="text" id="join-game-id" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" placeholder="相手のゲームIDを入力">
+                    <button id="join-game-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300">参加</button>
+                </div>
             </div>
         </div>
-        <div id="board" class="board"></div>
-        <div id="game-info" class="mt-4 text-center text-lg font-semibold bg-white p-4 rounded-xl shadow-md">
-            <p>ゲームID: <span id="game-id-display" class="font-mono text-blue-600 break-all"></span></p>
-            <p id="game-message" class="mt-2"></p>
+        
+        <!-- Game Info Section -->
+        <div id="game-info" class="w-full max-w-md bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md mb-4 hidden">
+             <div class="flex justify-between items-center mb-2">
+                <span class="font-semibold">ゲームID:</span>
+                <div class="flex items-center gap-2">
+                    <span id="game-id-display" class="text-lg font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded"></span>
+                    <button id="copy-id-btn" class="bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-sm py-1 px-2 rounded-lg">コピー</button>
+                </div>
+            </div>
+            <div id="player-info" class="text-center mb-2">
+                <p class="font-semibold">あなたは <span id="player-color"></span> です。</p>
+                <p id="user-id-display" class="text-xs text-gray-500 dark:text-gray-400 mt-1"></p>
+            </div>
+            <div class="flex justify-around items-center text-xl font-bold mb-2">
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full bg-black"></div>
+                    <span>黒: <span id="black-score">2</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full bg-white border border-gray-400"></div>
+                    <span>白: <span id="white-score">2</span></span>
+                </div>
+            </div>
+            <div id="message-area" class="text-center text-lg font-semibold text-yellow-500 h-8"></div>
         </div>
-    </div>
 
-    <!-- ゲーム結果表示用モーダル -->
-    <div id="result-modal" class="modal">
-        <div class="modal-content">
-            <h2 id="result-title" class="text-2xl font-bold mb-4"></h2>
-            <p id="result-message" class="text-lg mb-6"></p>
-            <button id="play-again-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">もう一度遊ぶ</button>
-        </div>
-    </div>
-
-    <!-- カスタムアラート用モーダル -->
-    <div id="custom-alert-modal" class="modal">
-        <div class="modal-content">
-            <p id="custom-alert-message" class="text-lg mb-6"></p>
-            <button id="custom-alert-ok-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">OK</button>
+        <!-- Othello Board -->
+        <div id="board-container"></div>
+        
+        <!-- Modal for messages -->
+        <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
+            <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl text-center">
+                <p id="modal-message" class="text-xl mb-4"></p>
+                <button id="modal-close-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">OK</button>
+            </div>
         </div>
     </div>
 
     <script type="module">
+        // Firebaseのインポート
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, updateDoc, collection, query, where, getDocs, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, updateDoc, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase設定
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-othello-app';
-
-        // Firebaseの初期化
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-
-        // UI要素
-        const setupScreen = document.getElementById('setup-screen');
-        const gameScreen = document.getElementById('game-screen');
-        const boardElement = document.getElementById('board');
-        const turnIndicator = document.getElementById('turn-indicator');
-        const blackScoreElement = document.getElementById('black-score');
-        const whiteScoreElement = document.getElementById('white-score');
+        // --- DOM要素の取得 ---
+        const newGameBtn = document.getElementById('new-game-btn');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const joinGameIdInput = document.getElementById('join-game-id');
+        const boardContainer = document.getElementById('board-container');
+        const blackScoreEl = document.getElementById('black-score');
+        const whiteScoreEl = document.getElementById('white-score');
+        const messageArea = document.getElementById('message-area');
         const gameIdDisplay = document.getElementById('game-id-display');
-        const gameMessage = document.getElementById('game-message');
-        const userNicknameElement = document.getElementById('user-nickname');
-        const createGameBtn = document.getElementById('create-game-btn');
-        const waitingGamesList = document.getElementById('waiting-games-list');
-        const blackPlayerNameElement = document.getElementById('black-player-name');
-        const whitePlayerNameElement = document.getElementById('white-player-name');
+        const copyIdBtn = document.getElementById('copy-id-btn');
+        const playerColorEl = document.getElementById('player-color');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const gameSetupDiv = document.getElementById('game-setup');
+        const gameInfoDiv = document.getElementById('game-info');
+        const modal = document.getElementById('modal');
+        const modalMessage = document.getElementById('modal-message');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
 
-        // モーダル要素
-        const resultModal = document.getElementById('result-modal');
-        const resultTitle = document.getElementById('result-title');
-        const resultMessage = document.getElementById('result-message');
-        const customAlertModal = document.getElementById('custom-alert-modal');
-        const customAlertMessage = document.getElementById('custom-alert-message');
-        const customAlertOkBtn = document.getElementById('custom-alert-ok-btn');
+        // --- Firebaseの初期化 ---
+        let db, auth;
+        let userId;
+        let unsubscribeGame = null; // onSnapshotの購読を解除するための変数
         
-        // グローバル変数
-        let currentUser = null;
-        let currentUserNickname = null;
-        let currentGameId = null;
-        let unsubscribeGame = null;
-        let unsubscribeWaitingGames = null;
+        // Canvas環境から提供されるグローバル変数を使用
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-othello-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
 
-        // ニックネーム生成用の単語リスト
-        const adjectives = ['元気な', '賢い', '速い', '静かな', '明るい', '親切な', '勇敢な', '面白い', '大きな', '小さな'];
-        const nouns = ['パンダ', 'ライオン', 'イルカ', '鷹', '猫', '犬', 'キツネ', 'ウサギ', '龍', '虎'];
-
-        // カスタムアラート機能
-        function customAlert(message) {
-            customAlertMessage.textContent = message;
-            customAlertModal.style.display = 'flex';
+        if (firebaseConfig) {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } else {
+            console.error("Firebase config is not available.");
+            showMessageModal("Firebaseの設定が利用できません。アプリをリロードしてください。");
         }
-        customAlertOkBtn.addEventListener('click', () => {
-            customAlertModal.style.display = 'none';
-        });
-        
-        // 待機中ゲームリストをリアルタイムで監視・表示する関数
-        function listenForWaitingGames() {
-            if (unsubscribeWaitingGames) unsubscribeWaitingGames();
-            
-            const gamesCollectionRef = collection(db, `artifacts/${appId}/public/data/games`);
-            const q = query(gamesCollectionRef, where("status", "==", "waiting"));
-            
-            unsubscribeWaitingGames = onSnapshot(q, (querySnapshot) => {
-                waitingGamesList.innerHTML = '';
-                if (querySnapshot.empty) {
-                    waitingGamesList.innerHTML = '<p class="text-gray-500">参加可能なゲームはありません。</p>';
+
+        // --- ゲームの状態管理 ---
+        let gameState = null;
+        let playerNumber = 0; // 1 for black, 2 for white
+
+        // --- 初期化処理 ---
+        window.onload = async () => {
+            if (!auth) return;
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
                 } else {
-                    querySnapshot.forEach(doc => {
-                        const game = doc.data();
-                        const gameId = doc.id;
-                        const listItem = document.createElement('div');
-                        listItem.className = 'flex justify-between items-center p-2 bg-white rounded shadow-sm';
-                        listItem.innerHTML = `
-                            <span class="font-semibold text-gray-800">${game.creatorNickname || '無名のプレイヤー'}さんのゲーム</span>
-                            <button class="join-game-btn bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded-md transition duration-300" data-id="${gameId}">参加</button>
-                        `;
-                        waitingGamesList.appendChild(listItem);
-                    });
-                    document.querySelectorAll('.join-game-btn').forEach(button => {
-                        button.addEventListener('click', (e) => {
-                            if (e.target.dataset.id) {
-                                joinGame(e.target.dataset.id);
-                            }
-                        });
-                    });
+                    try {
+                        // __initial_auth_tokenが定義されていればそれを使用、なければ匿名認証
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Authentication failed:", error);
+                        showMessageModal("認証に失敗しました。ページをリロードしてください。");
+                    }
                 }
             });
-        }
-        
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                currentUser = user;
-                const userRef = doc(db, `artifacts/${appId}/public/data/users`, user.uid);
-                const userSnap = await getDoc(userRef);
+        };
 
-                if (userSnap.exists() && userSnap.data().friendlyId) {
-                    currentUserNickname = userSnap.data().friendlyId;
-                } else {
-                    // 新しいユーザーなので、ユニークなニックネームを生成する
-                    let friendlyId = '';
-                    let isUnique = false;
-                    let attempts = 0;
-                    const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
+        // --- イベントリスナー ---
+        newGameBtn.addEventListener('click', createNewGame);
+        joinGameBtn.addEventListener('click', joinGame);
+        copyIdBtn.addEventListener('click', copyGameId);
+        modalCloseBtn.addEventListener('click', () => modal.style.display = 'none');
 
-                    while (!isUnique && attempts < 20) { // 20回まで試行
-                        attempts++;
-                        const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-                        const noun = nouns[Math.floor(Math.random() * nouns.length)];
-                        const number = Math.floor(1000 + Math.random() * 9000); // 4桁の乱数
-                        let potentialId = `${adj}${noun}${number}`;
+        // --- ゲームロジック ---
 
-                        const q = query(usersCollectionRef, where("friendlyId", "==", potentialId));
-                        const querySnapshot = await getDocs(q);
-
-                        if (querySnapshot.empty) {
-                            friendlyId = potentialId;
-                            isUnique = true;
-                        }
-                    }
-
-                    if (!isUnique) {
-                        // フォールバック: ユニークな名前が見つからなかった場合
-                        friendlyId = `プレイヤー${user.uid.substring(0, 5)}`;
-                    }
-                    
-                    await setDoc(userRef, { friendlyId: friendlyId, uid: user.uid });
-                    currentUserNickname = friendlyId;
-                }
-                
-                userNicknameElement.textContent = currentUserNickname;
-                createGameBtn.disabled = false;
-                listenForWaitingGames();
-            } else {
-                currentUser = null;
-                currentUserNickname = null;
-                userNicknameElement.textContent = '認証に失敗しました';
-                createGameBtn.disabled = true;
-                if (unsubscribeWaitingGames) unsubscribeWaitingGames();
-            }
-        });
-
-        async function authenticateUser() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Authentication failed:", error);
-                customAlert("認証に失敗しました。ページをリロードしてください。");
-            }
-        }
-        
-        createGameBtn.addEventListener('click', async () => {
-            if (!currentUser || !currentUserNickname) {
-                customAlert("ユーザー情報が取得できていません。");
+        /**
+         * 新しいゲームを作成する
+         */
+        async function createNewGame() {
+            if (!userId) {
+                showMessageModal("ユーザー情報が取得できません。");
                 return;
             }
-
-            // ユーザーが既に待機中のゲームを持っていないか確認
-            const gamesCollectionRef = collection(db, `artifacts/${appId}/public/data/games`);
-            const q = query(gamesCollectionRef, where("players.black", "==", currentUser.uid), where("status", "==", "waiting"));
-            const existingGames = await getDocs(q);
-
-            if (!existingGames.empty) {
-                customAlert("既に参加待機中のゲームがあります。");
-                return;
-            }
-
-            const newGameDocRef = doc(gamesCollectionRef);
-            const gameId = newGameDocRef.id;
-            currentGameId = gameId;
-            const initialBoard = Array(8).fill(null).map(() => Array(8).fill(0));
-            initialBoard[3][3] = 2; initialBoard[3][4] = 1;
-            initialBoard[4][3] = 1; initialBoard[4][4] = 2;
-            const gameData = {
+            const gameId = generateGameId();
+            const initialBoard = createInitialBoard();
+            
+            gameState = {
                 board: JSON.stringify(initialBoard),
-                players: { black: currentUser.uid, white: null },
-                playerNicknames: { black: currentUserNickname, white: null },
-                creatorNickname: currentUserNickname,
-                currentPlayer: 'black',
-                status: 'waiting',
+                currentPlayer: 1, // Black starts
+                players: {
+                    player1: userId, // Creator is player 1 (black)
+                    player2: null
+                },
+                gameOver: false,
                 winner: null,
-                createdAt: new Date()
+                scores: { black: 2, white: 2 }
             };
-            await setDoc(newGameDocRef, gameData);
-            joinGame(gameId);
-        });
 
-        async function joinGame(gameId) {
-            if (!currentUser || !currentUserNickname) {
-                customAlert("ユーザー情報が取得できていません。");
+            try {
+                const gameRef = doc(db, `artifacts/${appId}/public/data/othello`, gameId);
+                await setDoc(gameRef, gameState);
+                await setupGameSession(gameId);
+            } catch (error) {
+                console.error("Error creating new game:", error);
+                showMessageModal("ゲームの作成に失敗しました。");
+            }
+        }
+
+        /**
+         * 既存のゲームに参加する (修正版)
+         */
+        async function joinGame() {
+            const gameId = joinGameIdInput.value.trim();
+            if (!gameId) {
+                showMessageModal("ゲームIDを入力してください。");
                 return;
             }
-            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, gameId);
-            
-            try {
-                await runTransaction(db, async (transaction) => {
-                    const gameSnap = await transaction.get(gameRef);
-                    if (!gameSnap.exists()) {
-                        throw "指定されたゲームが見つかりません。";
-                    }
-                    const data = gameSnap.data();
-                    if (data.players.black === currentUser.uid) {
-                        return; // 自分で作成したゲームに参加しようとしている（待機画面に遷移するだけ）
-                    }
-                    if (data.status !== 'waiting') {
-                        throw "このゲームは既に対戦中です。";
-                    }
-                    
-                    transaction.update(gameRef, {
-                        'players.white': currentUser.uid,
-                        'playerNicknames.white': currentUserNickname,
-                        status: 'active'
-                    });
-                });
+            if (!userId) {
+                showMessageModal("ユーザー情報が取得できません。しばらく待ってからもう一度お試しください。");
+                return;
+            }
 
-                currentGameId = gameId;
-                if (unsubscribeWaitingGames) unsubscribeWaitingGames();
-                setupScreen.style.display = 'none';
-                gameScreen.style.display = 'flex';
-                gameIdDisplay.textContent = gameId;
+            try {
+                const gameRef = doc(db, `artifacts/${appId}/public/data/othello`, gameId);
+                const gameSnap = await getDoc(gameRef);
+
+                if (!gameSnap.exists()) {
+                    showMessageModal("指定されたゲームIDは存在しません。");
+                    return;
+                }
                 
-                if (unsubscribeGame) unsubscribeGame();
-                unsubscribeGame = onSnapshot(gameRef, (doc) => {
-                    const updatedGameData = doc.data();
-                    if (updatedGameData) {
-                        if (typeof updatedGameData.board === 'string') {
-                            updatedGameData.board = JSON.parse(updatedGameData.board);
-                        }
-                        renderGame(updatedGameData);
-                    }
-                });
+                const remoteGameState = gameSnap.data();
+                const player1 = remoteGameState.players.player1;
+                const player2 = remoteGameState.players.player2;
+
+                // 自分がすでに参加者か確認 (ブラウザリロードなどの場合)
+                if (player1 === userId || player2 === userId) {
+                    await setupGameSession(gameId);
+                    return;
+                }
+                
+                // 2人目のプレイヤースロットが空いているか確認
+                if (!player2) {
+                    // 2人目のプレイヤーとして参加
+                    await updateDoc(gameRef, { 'players.player2': userId });
+                    await setupGameSession(gameId);
+                } else {
+                    // ゲームが満員の場合
+                    showMessageModal("このゲームはすでに満員です。");
+                }
 
             } catch (error) {
-                console.error("Join game failed: ", error);
-                customAlert(typeof error === 'string' ? error : "ゲームへの参加に失敗しました。");
-                // 失敗したら待機リストを再読み込み
-                listenForWaitingGames();
+                console.error("Error joining game:", error);
+                showMessageModal("ゲームへの参加に失敗しました。");
             }
-        }
-
-        async function renderGame(gameData) {
-            const myColor = gameData.players.black === currentUser.uid ? 'black' : 'white';
-            blackPlayerNameElement.textContent = `黒 (${gameData.playerNicknames.black || '参加待'})`;
-            whitePlayerNameElement.textContent = `白 (${gameData.playerNicknames.white || '参加待'})`;
-            if (myColor === 'black') {
-                blackPlayerNameElement.textContent += ' (あなた)';
-            } else if (myColor === 'white') {
-                whitePlayerNameElement.textContent += ' (あなた)';
-            }
-            
-            renderBoard(gameData.board);
-            updateScores(gameData.board);
-            updateTurnIndicator(gameData);
-            checkGameStatus(gameData);
-        }
-
-        function renderBoard(board) {
-            boardElement.innerHTML = '';
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    const cell = document.createElement('div');
-                    cell.classList.add('cell');
-                    cell.dataset.row = r; cell.dataset.col = c;
-                    if (board[r][c] !== 0) {
-                        const disc = document.createElement('div');
-                        disc.classList.add('disc');
-                        disc.classList.add(board[r][c] === 1 ? 'black' : 'white');
-                        cell.appendChild(disc);
-                    }
-                    cell.addEventListener('click', handleCellClick);
-                    boardElement.appendChild(cell);
-                }
-            }
-        }
-
-        function updateScores(board) {
-            let blackScore = 0, whiteScore = 0;
-            board.flat().forEach(cell => {
-                if (cell === 1) blackScore++;
-                if (cell === 2) whiteScore++;
-            });
-            blackScoreElement.textContent = blackScore;
-            whiteScoreElement.textContent = whiteScore;
         }
         
-        function updateTurnIndicator(gameData) {
-            if (gameData.status === 'finished') {
-                turnIndicator.textContent = 'ゲーム終了';
-                turnIndicator.className = 'text-xl font-semibold p-2 rounded-lg bg-gray-300 text-gray-800';
+        /**
+         * ゲームセッションをセットアップし、リアルタイム更新を開始する
+         * @param {string} gameId - The ID of the game session
+         */
+        async function setupGameSession(gameId) {
+            // 既存のリスナーがあれば解除
+            if (unsubscribeGame) {
+                unsubscribeGame();
+            }
+
+            gameSetupDiv.classList.add('hidden');
+            gameInfoDiv.classList.remove('hidden');
+            gameIdDisplay.textContent = gameId;
+            
+            const gameRef = doc(db, `artifacts/${appId}/public/data/othello`, gameId);
+            
+            unsubscribeGame = onSnapshot(gameRef, (doc) => {
+                if (!doc.exists()) {
+                    showMessageModal("ゲームデータが見つかりません。");
+                    if(unsubscribeGame) unsubscribeGame();
+                    return;
+                }
+                
+                gameState = doc.data();
+                
+                // プレイヤー番号を決定
+                if (gameState.players.player1 === userId) {
+                    playerNumber = 1;
+                    playerColorEl.textContent = "黒 ⚫";
+                } else if (gameState.players.player2 === userId) {
+                    playerNumber = 2;
+                    playerColorEl.textContent = "白 ⚪";
+                } else {
+                    playerNumber = 0; // 観戦者
+                    playerColorEl.textContent = "観戦中";
+                }
+                userIdDisplay.textContent = `あなたのID: ${userId}`;
+
+                renderBoard();
+                updateInfo();
+            });
+        }
+
+
+        /**
+         * ボードを描画する
+         */
+        function renderBoard() {
+            if (!gameState) return;
+            const board = JSON.parse(gameState.board);
+            boardContainer.innerHTML = '';
+            
+            const validMoves = (playerNumber === gameState.currentPlayer) ? getValidMoves(board, gameState.currentPlayer) : [];
+
+            board.forEach((row, r) => {
+                row.forEach((cell, c) => {
+                    const cellEl = document.createElement('div');
+                    cellEl.classList.add('cell');
+                    cellEl.dataset.row = r;
+                    cellEl.dataset.col = c;
+
+                    if (cell !== 0) {
+                        const disc = document.createElement('div');
+                        disc.classList.add('disc', cell === 1 ? 'disc-black' : 'disc-white');
+                        cellEl.appendChild(disc);
+                    } else {
+                        // 有効な手を表示
+                        if (validMoves.some(move => move.row === r && move.col === c)) {
+                             const hint = document.createElement('div');
+                             hint.classList.add('valid-move-hint');
+                             cellEl.appendChild(hint);
+                             cellEl.addEventListener('click', handleCellClick);
+                        }
+                    }
+                    boardContainer.appendChild(cellEl);
+                });
+            });
+        }
+        
+        /**
+         * セルがクリックされた時の処理
+         * @param {Event} event - The click event
+         */
+        async function handleCellClick(event) {
+            if (!gameState || gameState.gameOver) return;
+            if (playerNumber !== gameState.currentPlayer) {
+                showMessageModal("相手のターンです。");
                 return;
             }
-            const myColor = gameData.players.black === currentUser.uid ? 'black' : 'white';
-            const isMyTurn = gameData.currentPlayer === myColor;
-            if (isMyTurn) {
-                turnIndicator.textContent = 'あなたの番です';
-                turnIndicator.className = 'text-xl font-semibold p-2 rounded-lg bg-green-200 text-green-800 animate-pulse';
-            } else {
-                turnIndicator.textContent = '相手の番です';
-                turnIndicator.className = 'text-xl font-semibold p-2 rounded-lg bg-yellow-200 text-yellow-800';
-            }
-            if (gameData.status === 'waiting') {
-                gameMessage.textContent = '対戦相手を待っています...';
-            } else {
-                gameMessage.textContent = '';
-            }
-        }
 
-        function checkGameStatus(gameData) {
-            if (gameData.status === 'finished') showResultModal(gameData);
-        }
+            const cell = event.currentTarget;
+            const row = parseInt(cell.dataset.row);
+            const col = parseInt(cell.dataset.col);
 
-        async function handleCellClick(event) {
-            const row = parseInt(event.currentTarget.dataset.row);
-            const col = parseInt(event.currentTarget.dataset.col);
-            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, currentGameId);
-            const gameSnap = await getDoc(gameRef);
-            if (!gameSnap.exists()) return;
-            let gameData = gameSnap.data();
-            if (typeof gameData.board === 'string') gameData.board = JSON.parse(gameData.board);
-            const myColor = gameData.players.black === currentUser.uid ? 'black' : 'white';
-            const myColorId = myColor === 'black' ? 1 : 2;
-            if (gameData.status !== 'active' || gameData.currentPlayer !== myColor || gameData.board[row][col] !== 0) return;
-            const opponentColorId = myColorId === 1 ? 2 : 1;
-            const directions = [[-1,-1], [-1,0], [-1,1], [0,-1], [0,1], [1,-1], [1,0], [1,1]];
-            let piecesToFlip = [];
-            for (const [dr, dc] of directions) {
-                let line = [], r = row + dr, c = col + dc;
-                while (r >= 0 && r < 8 && c >= 0 && c < 8 && gameData.board[r][c] === opponentColorId) {
-                    line.push([r, c]); r += dr; c += dc;
-                }
-                if (r >= 0 && r < 8 && c >= 0 && c < 8 && gameData.board[r][c] === myColorId) {
-                    piecesToFlip.push(...line);
-                }
+            let board = JSON.parse(gameState.board);
+            const player = gameState.currentPlayer;
+
+            const flippedStones = getFlippedStones(board, row, col, player);
+
+            if (flippedStones.length === 0) {
+                return; // 無効な手
             }
-            if (piecesToFlip.length === 0) return;
-            const newBoard = gameData.board.map(r => [...r]);
-            newBoard[row][col] = myColorId;
-            piecesToFlip.forEach(([r, c]) => { newBoard[r][c] = myColorId; });
-            const nextPlayer = gameData.currentPlayer === 'black' ? 'white' : 'black';
-            let nextPlayerHasMoves = hasValidMoves(newBoard, nextPlayer);
-            let newCurrentPlayer = nextPlayer;
-            if (!nextPlayerHasMoves) {
-                let myPlayerHasMoves = hasValidMoves(newBoard, myColor);
-                if (myPlayerHasMoves) {
-                    newCurrentPlayer = myColor;
-                    customAlert("相手はパスしました。あなたのターンが続きます。");
-                } else {
-                    endGame(newBoard); return;
-                }
-            }
-            if (newBoard.flat().every(cell => cell !== 0)) {
-                endGame(newBoard); return;
-            }
-            await updateDoc(gameRef, {
-                board: JSON.stringify(newBoard),
-                currentPlayer: newCurrentPlayer
+
+            // ボードを更新
+            board[row][col] = player;
+            flippedStones.forEach(stone => {
+                board[stone.row][stone.col] = player;
             });
+
+            // 次のプレイヤーを決定
+            const nextPlayer = 3 - player;
+            let newCurrentPlayer = nextPlayer;
+            let isGameOver = false;
+            let winner = null;
+
+            // 次のプレイヤーがパスするかどうかをチェック
+            const nextPlayerHasMoves = getValidMoves(board, nextPlayer).length > 0;
+            if (!nextPlayerHasMoves) {
+                 // 元のプレイヤーがまだ手があるかチェック
+                 const currentPlayerHasMoves = getValidMoves(board, player).length > 0;
+                 if (currentPlayerHasMoves) {
+                     newCurrentPlayer = player; // パスして、元のプレイヤーのターン
+                 } else {
+                     // 両者とも置けないのでゲーム終了
+                     isGameOver = true;
+                 }
+            }
+            
+            const scores = calculateScores(board);
+
+            // 盤面が埋まったらゲーム終了
+            if (scores.black + scores.white === 64) {
+                isGameOver = true;
+            }
+            
+            if(isGameOver) {
+                if (scores.black > scores.white) winner = 1;
+                else if (scores.white > scores.black) winner = 2;
+                else winner = 0; // Draw
+            }
+
+            const updatedGameState = {
+                board: JSON.stringify(board),
+                currentPlayer: newCurrentPlayer,
+                gameOver: isGameOver,
+                winner: winner,
+                scores: scores,
+            };
+
+            try {
+                const gameRef = doc(db, `artifacts/${appId}/public/data/othello`, gameIdDisplay.textContent);
+                await updateDoc(gameRef, updatedGameState);
+            } catch (error) {
+                console.error("Error updating game state:", error);
+                showMessageModal("ゲーム状態の更新に失敗しました。");
+            }
+        }
+
+        /**
+         * ゲーム情報を更新する
+         */
+        function updateInfo() {
+            if (!gameState) return;
+            
+            const scores = gameState.scores;
+            blackScoreEl.textContent = scores.black;
+            whiteScoreEl.textContent = scores.white;
+
+            if (gameState.gameOver) {
+                if (gameState.winner === 1) {
+                    messageArea.textContent = "黒の勝ちです！🎉";
+                } else if (gameState.winner === 2) {
+                    messageArea.textContent = "白の勝ちです！🎉";
+                } else {
+                    messageArea.textContent = "引き分けです！";
+                }
+            } else {
+                if(gameState.players.player2 === null) {
+                    messageArea.textContent = "相手の参加を待っています...";
+                    return;
+                }
+
+                if (gameState.currentPlayer === playerNumber) {
+                    messageArea.textContent = "あなたの番です";
+                } else {
+                    const opponentColor = gameState.currentPlayer === 1 ? "黒" : "白";
+                    messageArea.textContent = `相手 (${opponentColor}) の番です...`;
+                }
+            }
         }
         
-        function hasValidMoves(board, playerColor) {
-            const myColorId = playerColor === 'black' ? 1 : 2;
-            const opponentColorId = myColorId === 1 ? 2 : 1;
-            const directions = [[-1,-1], [-1,0], [-1,1], [0,-1], [0,1], [1,-1], [1,0], [1,1]];
+        /**
+         * スコアを計算する
+         * @param {Array<Array<number>>} board - The game board
+         * @returns {{black: number, white: number}}
+         */
+        function calculateScores(board) {
+            let black = 0;
+            let white = 0;
+            board.forEach(row => {
+                row.forEach(cell => {
+                    if (cell === 1) black++;
+                    if (cell === 2) white++;
+                });
+            });
+            return { black, white };
+        }
+
+
+        /**
+         * 有効な手をすべて取得する
+         * @param {Array<Array<number>>} board - The game board
+         * @param {number} player - The current player (1 or 2)
+         * @returns {Array<{row: number, col: number}>}
+         */
+        function getValidMoves(board, player) {
+            const moves = [];
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
                     if (board[r][c] === 0) {
-                        for (const [dr, dc] of directions) {
-                            let line = [], nr = r + dr, nc = c + dc;
-                            while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && board[nr][nc] === opponentColorId) {
-                                line.push([nr, nc]); nr += dr; nc += dc;
-                            }
-                            if (line.length > 0 && nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && board[nr][nc] === myColorId) return true;
+                        if (getFlippedStones(board, r, c, player).length > 0) {
+                            moves.push({ row: r, col: c });
                         }
                     }
                 }
             }
-            return false;
+            return moves;
         }
 
-        async function endGame(finalBoard) {
-            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, currentGameId);
-            let blackScore = 0, whiteScore = 0;
-            finalBoard.flat().forEach(cell => {
-                if (cell === 1) blackScore++;
-                if (cell === 2) whiteScore++;
-            });
-            let winner = null;
-            if (blackScore > whiteScore) winner = 'black';
-            else if (whiteScore > blackScore) winner = 'white';
-            else winner = 'draw';
-            await updateDoc(gameRef, {
-                status: 'finished',
-                winner: winner,
-                board: JSON.stringify(finalBoard)
-            });
-        }
-
-        function showResultModal(gameData) {
-            const { winner, board, playerNicknames } = gameData;
-            let title = '';
-            if (winner === 'draw') {
-                title = '引き分け';
-            } else {
-                const winnerNickname = winner === 'black' ? playerNicknames.black : playerNicknames.white;
-                title = `${winnerNickname}の勝ちです！`;
+        /**
+         * 指定した場所に石を置いた場合に裏返る石のリストを取得する
+         * @param {Array<Array<number>>} board - The game board
+         * @param {number} row - The row to check
+         * @param {number} col - The column to check
+         * @param {number} player - The current player (1 or 2)
+         * @returns {Array<{row: number, col: number}>}
+         */
+        function getFlippedStones(board, row, col, player) {
+            if (board[row][col] !== 0) {
+                return [];
             }
-            const blackScore = board.flat().filter(c => c === 1).length;
-            const whiteScore = board.flat().filter(c => c === 2).length;
-            const message = `スコア: 黒 ${blackScore} - 白 ${whiteScore}`;
-            resultTitle.textContent = title;
-            resultMessage.textContent = message;
-            resultModal.style.display = 'flex';
+
+            const opponent = 3 - player;
+            const directions = [
+                [-1, -1], [-1, 0], [-1, 1],
+                [0, -1],           [0, 1],
+                [1, -1], [1, 0], [1, 1]
+            ];
+            let allFlipped = [];
+
+            directions.forEach(([dr, dc]) => {
+                let r = row + dr;
+                let c = col + dc;
+                let potentialFlips = [];
+
+                while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                    if (board[r][c] === opponent) {
+                        potentialFlips.push({ row: r, col: c });
+                    } else if (board[r][c] === player) {
+                        allFlipped = allFlipped.concat(potentialFlips);
+                        break;
+                    } else { // Empty cell
+                        break;
+                    }
+                    r += dr;
+                    c += dc;
+                }
+            });
+            return allFlipped;
         }
 
-        document.getElementById('play-again-btn').addEventListener('click', () => {
-            resultModal.style.display = 'none';
-            gameScreen.style.display = 'none';
-            setupScreen.style.display = 'block';
-            if (unsubscribeGame) {
-                unsubscribeGame();
-                unsubscribeGame = null;
-            }
-            currentGameId = null;
-            listenForWaitingGames();
-        });
+        // --- ヘルパー関数 ---
 
-        // アプリケーションの開始
-        authenticateUser();
+        /**
+         * 初期盤面を作成する
+         * @returns {Array<Array<number>>}
+         */
+        function createInitialBoard() {
+            const board = Array(8).fill(null).map(() => Array(8).fill(0));
+            board[3][3] = 2; // White
+            board[3][4] = 1; // Black
+            board[4][3] = 1; // Black
+            board[4][4] = 2; // White
+            return board;
+        }
+
+        /**
+         * ユニークなゲームIDを生成する
+         * @returns {string}
+         */
+        function generateGameId() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        /**
+         * ゲームIDをクリップボードにコピーする
+         */
+        function copyGameId() {
+            const gameId = gameIdDisplay.textContent;
+            navigator.clipboard.writeText(gameId).then(() => {
+                showMessageModal("ゲームIDをコピーしました！");
+            }).catch(err => {
+                console.error('Could not copy text: ', err);
+                showMessageModal("コピーに失敗しました。");
+            });
+        }
+        
+        /**
+         * モーダルでメッセージを表示する
+         * @param {string} message - The message to display
+         */
+        function showMessageModal(message) {
+            modalMessage.textContent = message;
+            modal.style.display = 'flex';
+        }
 
     </script>
 </body>
